@@ -42,8 +42,8 @@ JDK 25 的 native-access 参数授权 JNI 原生访问；Maven 自身依赖仍�
 
 ### Linux 原生 transport
 
-在 Linux 上构建，Maven 会按 `amd64` / `aarch64` 自动启用匹配的原生依赖 profile。
-切换 transport 只改系统属性，不改业务 Handler：
+项目使用 `netty-all`，协议模块及平台原生库由其传递依赖提供。
+Mac 和 Linux 使用同一条构建命令，不再需要手动指定 Linux profile：
 
 ```bash
 ./mvnw clean verify
@@ -58,16 +58,9 @@ java --enable-native-access=ALL-UNNAMED \
   -jar target/atlas-gateway.jar
 ```
 
-如果在 Mac 打包后复制到 Linux，必须显式包含目标原生库：
+在 Mac 构建的 jar 也会包含 netty-all 引入的 Linux 原生库，可复制到匹配架构的 Linux 运行。
+这会增加依赖数量和产物体积，适合当前需要尝试多种 Netty 能力的学习项目。
 
-```bash
-# Intel/AMD Linux
-./mvnw -Plinux-x86_64 clean verify
-# ARM64 Linux，例如 Apple Silicon 上的 Ubuntu 虚拟机
-./mvnw -Plinux-aarch_64 clean verify
-```
-
-普通 macOS 构建的 jar 没有 Linux 原生库。两个 profile 不要同时启用。
 `IoUring.isAvailable()` 失败会带出底层原因；检查内核、架构、原生库以及 io_uring 系统策略。
 容器还受宿主内核和 seccomp 限制。不需要安装 liburing。
 `verify` 会实际测试可用的原生 transport；当前主机不可用的原生测试会标记为跳过。
@@ -207,6 +200,8 @@ examples/batch.json              示例请求
 benchmarks/report.lua            wrk 上报脚本
 src/test/                       配置、接口、资源释放和真实 socket 测试
 ```
+
+架构边界、演进目录、线程模型和学习路线见 [架构设计](docs/architecture.md)。
 
 学习入口：`Transport.select()` → `GatewayServer.start()` → `IngestHandler.channelRead0()`。
 当前业务层不直接操作 SQE/CQE，ring 提交与完成分发由 Netty 管理。

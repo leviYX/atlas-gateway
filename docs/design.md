@@ -16,7 +16,7 @@ IngestHandler：路由、响应与丢弃；ConnectionMetricsHandler：连接和 
 GatewayServer/Application：启动、关闭和进程入口。
 
 ## 执行步骤
-1. Maven wrapper、JDK 25 构建、Linux 原生依赖 profiles。
+1. Maven wrapper、JDK 25 构建；使用 netty-all 聚合协议模块和平台原生依赖。
 2. 先写 EmbeddedChannel 接口测试，验证缺少实现时失败。
 3. 实现配置、transport、校验、HTTP pipeline、指标。
 4. 添加真实 NIO socket 测试，构建可执行 jar；实际 HTTP 冒烟。
@@ -34,3 +34,6 @@ discard 不做 JSON 校验，事件数不计入已校验事件。
 http 处理 HTTP pipeline 事件；validation 校验上报内容；metrics 封装指标状态。
 测试按被测类包路径组织，跨包通过明确的方法协作，不公开可变计数器字段。
 所有类均提供中文职责说明，关键实现说明资源所有权、并发和 pipeline 顺序。
+
+## 后续架构
+依赖已统一为 netty-all，扩展方向与组件边界见 [架构设计](architecture.md)。
