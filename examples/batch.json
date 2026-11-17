@@ -1,0 +1,20 @@
+{
+  "batchId": "batch-001",
+  "source": "vehicle",
+  "schemaVersion": 1,
+  "events": [
+    {
+      "eventId": "event-001",
+      "eventType": "map_search",
+      "eventTime": 1794902400000,
+      "sessionId": "session-001",
+      "attributes": {"keyword": "停车场", "cityCode": "310000"}
+    },
+    {
+      "eventId": "event-002",
+      "eventType": "sug_click",
+      "eventTime": 1794902400100,
+      "attributes": {"poiId": "poi-001", "position": 1}
+    }
+  ]
+}
