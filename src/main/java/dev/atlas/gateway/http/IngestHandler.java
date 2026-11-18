@@ -29,6 +29,12 @@ public final class IngestHandler extends SimpleChannelInboundHandler<FullHttpReq
     private final EventBatchValidator validator;
     private final GatewayMetrics metrics;
 
+
+    private final static String HEALTH_PATH = "/health";
+    private final static String INGEST_PATH = "/v1/events/batch";
+    private final static String METRICS_PATH = "/metrics";
+
+
     public IngestHandler(String mode, int maxEvents, GatewayMetrics metrics) {
         this.mode = mode;
         this.validator = new EventBatchValidator(maxEvents);
@@ -45,9 +51,9 @@ public final class IngestHandler extends SimpleChannelInboundHandler<FullHttpReq
                 return;
             }
             String path = new QueryStringDecoder(request.uri()).path();
-            boolean ingest = "/v1/events/batch".equals(path);
-            boolean health = "/health".equals(path);
-            boolean monitoring = "/metrics".equals(path);
+            boolean ingest = INGEST_PATH.equals(path);
+            boolean health = HEALTH_PATH.equals(path);
+            boolean monitoring = METRICS_PATH.equals(path);
             if (!ingest && !health && !monitoring) {
                 respond(ctx, request, HttpResponseStatus.NOT_FOUND, "not found\n", true, null);
                 return;
