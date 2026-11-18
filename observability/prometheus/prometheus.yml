@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+scrape_configs:
+  - job_name: atlas-gateway
+    scrape_timeout: 3s
+    metrics_path: /metrics
+    static_configs:
+      # Docker 到宿主机；网关需要 BIND_HOST=0.0.0.0，远程部署时改为网关的内网地址。
+      - targets: ['host.docker.internal:8080']

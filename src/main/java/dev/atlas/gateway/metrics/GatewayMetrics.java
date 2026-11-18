@@ -1,26 +1,115 @@
 package dev.atlas.gateway.metrics;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
+import io.micrometer.core.instrument.binder.system.FileDescriptorMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
+import io.micrometer.core.instrument.binder.system.UptimeMetrics;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufAllocatorMetric;
+import io.netty.buffer.ByteBufAllocatorMetricProvider;
+import io.netty.channel.EventLoopGroup;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.SingleThreadEventExecutor;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.LongAdder;
 
 /**
- * 收集多个 EventLoop 共享的进程级指标，并输出 Prometheus 文本快照。
- * 连接限额使用原子计数，累计指标使用 LongAdder 降低多线程更新竞争；快照不是原子事务。
+ * 统一注册业务、JVM、默认 Netty 分配器与 Linux 进程内存指标，供 Prometheus 抓取。
+ * 每个服务实例使用独立 registry；所有标签均有界，不使用设备 ID、URL 或搜索词作标签。
  */
-public final class GatewayMetrics {
+public final class GatewayMetrics implements AutoCloseable {
+    private final PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+    private final JvmGcMetrics gc = new JvmGcMetrics();
     private final AtomicInteger activeConnections = new AtomicInteger();
-    private final LongAdder connections = new LongAdder();
-    private final LongAdder rejectedConnections = new LongAdder();
-    private final LongAdder requests = new LongAdder();
-    private final LongAdder responses = new LongAdder();
-    private final LongAdder errors = new LongAdder();
-    private final LongAdder bodyBytes = new LongAdder();
-    private final LongAdder acceptedBatches = new LongAdder();
-    private final LongAdder validatedEvents = new LongAdder();
-    private final LongAdder processingNanos = new LongAdder();
-    private final LongAdder processedRequests = new LongAdder();
+    private final AtomicInteger activeHandlers = new AtomicInteger();
+    private final AtomicBoolean closed = new AtomicBoolean();
+    private final Counter connections = counter("atlas.connections");
+    private final Counter rejectedConnections = counter("atlas.connections.rejected");
+    private final Counter requests = counter("atlas.http.requests");
+    private final Counter responses = counter("atlas.http.responses");
+    private final Counter errors = counter("atlas.http.errors");
+    private final Counter bodyBytes = counter("atlas.http.body.bytes");
+    private final Counter acceptedBatches = counter("atlas.batches.accepted");
+    private final Counter validatedEvents = counter("atlas.events.validated");
+    private final Timer processing = Timer.builder("atlas.handler.duration")
+            .description("业务回调耗时，不含上传、聚合和网络传输")
+            .publishPercentileHistogram()
+            .minimumExpectedValue(Duration.ofNanos(1000))
+            .maximumExpectedValue(Duration.ofSeconds(10))
+            .register(registry);
+    private ScheduledExecutorService sampler;
 
-    /** 计入新连接并返回包含当前连接的总数，用于原子执行连接限额判断。 */
+    public GatewayMetrics() {
+        this("unknown", "unknown");
+    }
+
+    public GatewayMetrics(String transport, String mode) {
+        Gauge.builder("atlas.connections.active", activeConnections, AtomicInteger::get).register(registry);
+        Gauge.builder("atlas.handlers.active", activeHandlers, AtomicInteger::get).register(registry);
+        Gauge.builder("atlas.runtime.info", () -> 1).tags("transport", transport, "mode", mode).register(registry);
+        new ClassLoaderMetrics().bindTo(registry);
+        new JvmMemoryMetrics().bindTo(registry);
+        new JvmThreadMetrics().bindTo(registry);
+        new ProcessorMetrics().bindTo(registry);
+        new UptimeMetrics().bindTo(registry);
+        new FileDescriptorMetrics().bindTo(registry);
+        gc.bindTo(registry);
+        if (ByteBufAllocator.DEFAULT instanceof ByteBufAllocatorMetricProvider provider) {
+            ByteBufAllocatorMetric allocator = provider.metric();
+            // 观察 Channel 实际使用的默认分配器，不能假设 Netty 4.2 一定使用 pooled allocator。
+            Gauge.builder("atlas.netty.allocator.direct.memory.bytes", allocator,
+                    ByteBufAllocatorMetric::usedDirectMemory).register(registry);
+            Gauge.builder("atlas.netty.allocator.heap.memory.bytes", allocator,
+                    ByteBufAllocatorMetric::usedHeapMemory).register(registry);
+        }
+        if (System.getProperty("os.name").startsWith("Linux")) {
+            LinuxProcessMemory memory = new LinuxProcessMemory(Path.of("/proc/self/status"));
+            memory.sample();
+            Gauge.builder("atlas.process.resident.memory.bytes", memory, LinuxProcessMemory::residentBytes)
+                    .strongReference(true).register(registry);
+            Gauge.builder("atlas.process.virtual.memory.bytes", memory, LinuxProcessMemory::virtualBytes)
+                    .strongReference(true).register(registry);
+            // 文件读取在独立守护线程上每秒执行，指标抓取只读取缓存，不让 EventLoop 做 proc 文件 I/O。
+            sampler = Executors.newSingleThreadScheduledExecutor(task -> {
+                Thread thread = new Thread(task, "atlas-process-sampler");
+                thread.setDaemon(true);
+                return thread;
+            });
+            sampler.scheduleAtFixedRate(memory::sample, 1, 1, TimeUnit.SECONDS);
+        }
+    }
+
+    /** 绑定每条事件循环的待执行任务数；这是任务队列，不是内核 SQ/CQ 的长度。 */
+    public void bindEventLoops(EventLoopGroup group, String role) {
+        int index = 0;
+        for (EventExecutor executor : group) {
+            if (executor instanceof SingleThreadEventExecutor single) {
+                Gauge.builder("atlas.eventloop.pending.tasks", single, SingleThreadEventExecutor::pendingTasks)
+                        .tags("role", role, "index", Integer.toString(index))
+                        .register(registry);
+            }
+            index++;
+        }
+    }
+
+    private Counter counter(String name) {
+        return registry.counter(name);
+    }
+
+    /** 活动连接数由原子变量维护，用于连接上限判断。 */
     public int connectionOpened() {
         connections.increment();
         return activeConnections.incrementAndGet();
@@ -29,20 +118,17 @@ public final class GatewayMetrics {
     public void connectionClosed() {
         activeConnections.decrementAndGet();
     }
-
     public void connectionRejected() {
         rejectedConnections.increment();
     }
-
     public void requestReceived() {
         requests.increment();
     }
-
     public void bodyReceived(int bytes) {
-        bodyBytes.add(bytes);
+        bodyBytes.increment(bytes);
     }
 
-    /** 仅统计最终响应；100 Continue 等临时响应不代表一次请求已经完成。 */
+    /** 记录进入出站链的最终响应；并不表示对端已经收到全部字节。 */
     public void responseWritten(int status) {
         if (status >= 200) {
             responses.increment();
@@ -55,33 +141,32 @@ public final class GatewayMetrics {
     public void batchAccepted() {
         acceptedBatches.increment();
     }
-
     public void eventsValidated(int count) {
-        validatedEvents.add(count);
+        validatedEvents.increment(count);
+    }
+    public void handlerStarted() {
+        activeHandlers.incrementAndGet();
     }
 
-    /** 只累计业务回调时间，不包含上传、请求聚合或响应在网络上的传输时间。 */
+    /** 对应 handlerStarted，在 finally 中调用，保证异常路径也减少活动数并计时。 */
     public void requestProcessed(long nanos) {
-        processedRequests.increment();
-        processingNanos.add(nanos);
+        activeHandlers.decrementAndGet();
+        processing.record(nanos, TimeUnit.NANOSECONDS);
     }
 
-    /** 返回并发近似快照；累计时间和次数可计算平均值，不能据此推导 P99。 */
+    /** 输出 Prometheus 格式，桶可用于聚合分位数；不能当作客户端端到端延迟。 */
     public String scrape() {
-        return metric("connections_active", "gauge", activeConnections.get())
-                + metric("connections_total", "counter", connections.sum())
-                + metric("connections_rejected_total", "counter", rejectedConnections.sum())
-                + metric("http_requests_total", "counter", requests.sum())
-                + metric("http_responses_total", "counter", responses.sum())
-                + metric("http_errors_total", "counter", errors.sum())
-                + metric("http_body_bytes_total", "counter", bodyBytes.sum())
-                + metric("batches_accepted_total", "counter", acceptedBatches.sum())
-                + metric("events_validated_total", "counter", validatedEvents.sum())
-                + metric("handler_duration_seconds_sum", "counter", processingNanos.sum() / 1_000_000_000.0)
-                + metric("handler_duration_seconds_count", "counter", processedRequests.sum());
+        return registry.scrape();
     }
 
-    private static String metric(String name, String type, Number value) {
-        return "# TYPE atlas_" + name + " " + type + "\natlas_" + name + " " + value + "\n";
+    @Override
+    public void close() {
+        if (closed.compareAndSet(false, true)) {
+            if (sampler != null) {
+                sampler.shutdownNow();
+            }
+            gc.close();
+            registry.close();
+        }
     }
 }

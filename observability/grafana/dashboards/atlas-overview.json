@@ -1,0 +1,529 @@
+{
+  "uid": "atlas-overview",
+  "title": "Atlas Gateway 压测总览",
+  "schemaVersion": 40,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "tags": [
+    "atlas",
+    "netty",
+    "benchmark"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "上报批次与校验事件速率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(atlas_batches_accepted_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "批次/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(atlas_events_validated_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "事件/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "description": ""
+    },
+    {
+      "id": 2,
+      "title": "HTTP 请求与错误",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(atlas_http_requests_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "请求/s（含探活抓取）"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(atlas_http_errors_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "错误/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "description": ""
+    },
+    {
+      "id": 3,
+      "title": "连接与业务回调",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(atlas_connections_active{job=\"atlas-gateway\",instance=~\"$instance\"})",
+          "legendFormat": "连接"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(atlas_handlers_active{job=\"atlas-gateway\",instance=~\"$instance\"})",
+          "legendFormat": "正在执行的回调"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "回调并发不是上传/输出排队的在途请求数。"
+    },
+    {
+      "id": 4,
+      "title": "连接新建与拒绝",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(atlas_connections_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "连接/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(atlas_connections_rejected_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "拒绝/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "description": ""
+    },
+    {
+      "id": 5,
+      "title": "服务端回调耗时 P95 / P99",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(atlas_handler_duration_seconds_bucket{job=\"atlas-gateway\",instance=~\"$instance\"}[1m])))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(atlas_handler_duration_seconds_bucket{job=\"atlas-gateway\",instance=~\"$instance\"}[1m])))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "包括探活和指标回调；不含上传、聚合、网络等待，客户端尾延迟必须在压测端观察。"
+    },
+    {
+      "id": 6,
+      "title": "进程 CPU",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_cpu_usage{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "CPU（整机比例）"
+        },
+        {
+          "refId": "B",
+          "expr": "system_cpu_usage{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "主机 CPU"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Micrometer CPU 比例按可用 CPU 归一化；pidstat 的 %CPU 通常以单核为 100%。"
+    },
+    {
+      "id": 7,
+      "title": "Linux RSS 与堆使用",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "atlas_process_resident_memory_bytes{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "RSS"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (jvm_memory_used_bytes{area=\"heap\",job=\"atlas-gateway\",instance=~\"$instance\"})",
+          "legendFormat": "堆使用"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "description": "RSS 仅 Linux 提供；缺失不代表 0。堆、堆外和 RSS 不应直接求和。"
+    },
+    {
+      "id": 8,
+      "title": "Netty 默认分配器内存",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "atlas_netty_allocator_direct_memory_bytes{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "direct"
+        },
+        {
+          "refId": "B",
+          "expr": "atlas_netty_allocator_heap_memory_bytes{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "heap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "description": "分配器保留内存不是当前消息有效载荷大小。自定义分配器需额外绑定。"
+    },
+    {
+      "id": 9,
+      "title": "JDK BufferPool",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_buffer_memory_used_bytes{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "{{id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "description": "JDK buffer pool 不保证覆盖 Netty 的全部堆外分配。"
+    },
+    {
+      "id": 10,
+      "title": "GC 暂停与次数",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "暂停秒/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(jvm_gc_pause_seconds_count{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "次数/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "累计暂停趋势；分析单次停顿请结合 JFR 和 GC 日志。"
+    },
+    {
+      "id": 11,
+      "title": "对象分配速率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(jvm_gc_memory_allocated_bytes_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "估算 bytes/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "description": "GC 事件驱动估算，详细分配热点见 JFR。"
+    },
+    {
+      "id": 12,
+      "title": "线程与文件描述符",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_threads_live_threads{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "线程"
+        },
+        {
+          "refId": "B",
+          "expr": "process_files_open_files{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "FD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": ""
+    },
+    {
+      "id": 13,
+      "title": "接收 HTTP body",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(atlas_http_body_bytes_total{job=\"atlas-gateway\",instance=~\"$instance\"}[1m]))",
+          "legendFormat": "bytes/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "description": "解码后收到的 body 字节；不是网卡流量。"
+    },
+    {
+      "id": 14,
+      "title": "抓取健康与进程存活时间",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "up"
+        },
+        {
+          "refId": "B",
+          "expr": "process_uptime_seconds{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "uptime 秒"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "先确认 up=1，再分析其余面板。transport/mode 信息由 atlas_runtime_info 查询。"
+    },
+    {
+      "id": 15,
+      "title": "EventLoop 待执行任务",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "atlas-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "atlas_eventloop_pending_tasks{job=\"atlas-gateway\",instance=~\"$instance\"}",
+          "legendFormat": "{{instance}} {{role}}-{{index}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Netty 执行器任务队列长度，不是 SQE/CQE 数量；瞬间阻塞不一定形成队列，结合 JFR 判断。"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "实例",
+        "type": "query",
+        "datasource": {
+          "uid": "atlas-prometheus",
+          "type": "prometheus"
+        },
+        "query": "label_values(up{job=\"atlas-gateway\"}, instance)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}

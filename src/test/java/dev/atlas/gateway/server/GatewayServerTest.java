@@ -54,6 +54,8 @@ class GatewayServerTest {
             assertEquals(200, metrics.statusCode());
             assertTrue(metrics.body().contains("atlas_events_validated_total 1"));
             assertTrue(metrics.body().contains("atlas_http_errors_total 2"));
+            assertTrue(metrics.body().contains("atlas_eventloop_pending_tasks"));
+            assertTrue(metrics.body().contains("jvm_memory_used_bytes"));
         }
     }
 

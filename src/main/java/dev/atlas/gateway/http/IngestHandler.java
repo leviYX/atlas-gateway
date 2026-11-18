@@ -37,6 +37,7 @@ public final class IngestHandler extends SimpleChannelInboundHandler<FullHttpReq
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
+        metrics.handlerStarted();
         long start = System.nanoTime();
         try {
             if (!request.decoderResult().isSuccess()) {

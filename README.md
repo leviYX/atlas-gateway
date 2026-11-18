@@ -26,7 +26,7 @@ JSON 校验在 EventLoop 执行，后续可用压测判断是否需要隔离；�
 - **JDK 25**，不是 JDK 17，也不需要 preview。
 - Maven Wrapper 已包含，首次执行需要下载 Maven/依赖。
 - macOS：NIO；Linux：NIO、epoll、io_uring。学习建议 Ubuntu 24.04、内核 6.8 或更新。
-- Netty 固定为已发布的 `4.2.16.Final`，不依赖另一个 Netty 源码仓库或 SNAPSHOT 本地安装。
+- Netty 固定为已发布的 `4.2.21.Final`，不依赖另一个 Netty 源码仓库或 SNAPSHOT 本地安装。
 
 ```bash
 # macOS：确认终端和 IDE 都使用 JDK 25
@@ -130,9 +130,31 @@ curl http://127.0.0.1:8080/metrics
 HTTP 计数包含 health/metrics；body 字节统计是接收到的解码后字节，不等同于网卡流量。
 连接超限直接关闭连接，不返回 HTTP 状态码。
 `atlas_handler_duration_seconds_sum/count` 只记录完整请求进入业务 Handler 后的同步处理时间，
-不包括请求上传、聚合、排队和响应网络传输；不是端到端延迟，也不能推出 P99。
+不包括请求上传、聚合、排队和响应网络传输；不是端到端延迟。
+新增的 `_bucket` 可估算回调 P99，但包含探活和指标抓取，不能当作客户端 P99。
 `discard` 模式不解析 JSON，因此不会增加 `atlas_events_validated_total`。
 指标为并发近似快照，连接数是单进程上限，计数从每次进程启动开始。
+
+## 压测可观测性
+
+已接入 Micrometer，`/metrics` 同时输出业务、JVM、默认 Netty 分配器和 Linux RSS 指标。
+提供 JFR/GC 启动脚本、Linux CPU/RSS/上下文切换采集器，以及 Prometheus + Grafana 总览。
+完整操作与指标含义见 [可观测性手册](docs/observability.md)。
+
+```bash
+# JDK 25；前台运行并生成 results/nio-001/，Ctrl+C 正常停止后导出 JFR
+TRANSPORT=nio scripts/run-observed.sh nio-001
+
+# 另一个终端：在 Linux 上采集 5 分钟
+python3 scripts/collect-linux.py results/nio-001 --duration 300
+
+# 监控容器；网关需监听容器可访问的地址，详见手册
+export GRAFANA_ADMIN_PASSWORD='请替换为本地密码'
+docker compose -f observability/compose.yaml up -d
+```
+
+Grafana 位于 http://localhost:3000，Prometheus 位于 http://localhost:9090。
+服务端回调耗时与客户端端到端尾延迟分开观察；RSS 不等于 JVM 堆大小。
 
 ## 配置
 

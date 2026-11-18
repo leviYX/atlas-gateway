@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class GatewayServer implements AutoCloseable {
     private final GatewayConfig config;
-    private final GatewayMetrics metrics = new GatewayMetrics();
+    private final GatewayMetrics metrics;
     private final ChannelGroup clients = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -39,6 +39,7 @@ public final class GatewayServer implements AutoCloseable {
 
     public GatewayServer(GatewayConfig config) {
         this.config = config;
+        this.metrics = new GatewayMetrics(config.transport(), config.mode());
     }
 
     public GatewayServer start() throws InterruptedException {
@@ -46,10 +47,12 @@ public final class GatewayServer implements AutoCloseable {
         if (closed.get() || !started.compareAndSet(false, true)) {
             throw new IllegalStateException("GatewayServer is single-use and cannot be restarted");
         }
-        Transport transport = Transport.select(config);
         try {
+            Transport transport = Transport.select(config);
             boss = new MultiThreadIoEventLoopGroup(1, transport.factory());
             workers = new MultiThreadIoEventLoopGroup(config.workers(), transport.factory());
+            metrics.bindEventLoops(boss, "boss");
+            metrics.bindEventLoops(workers, "worker");
             server = new ServerBootstrap().group(boss, workers).channel(transport.channelType())
                     .option(ChannelOption.SO_BACKLOG, 1024)
                     .childOption(ChannelOption.TCP_NODELAY, true)
@@ -99,5 +102,6 @@ public final class GatewayServer implements AutoCloseable {
         if (boss != null) {
             boss.shutdownGracefully(0, 5, TimeUnit.SECONDS).awaitUninterruptibly();
         }
+        metrics.close();
     }
 }

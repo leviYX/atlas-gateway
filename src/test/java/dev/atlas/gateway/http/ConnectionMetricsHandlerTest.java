@@ -26,10 +26,10 @@ class ConnectionMetricsHandlerTest {
         try {
             assertTrue(first.isActive());
             assertFalse(second.isActive());
-            assertTrue(metrics.scrape().contains("atlas_connections_active 1\n"));
-            assertTrue(metrics.scrape().contains("atlas_connections_rejected_total 1\n"));
+            assertTrue(metrics.scrape().contains("atlas_connections_active 1.0\n"));
+            assertTrue(metrics.scrape().contains("atlas_connections_rejected_total 1.0\n"));
             first.close();
-            assertTrue(metrics.scrape().contains("atlas_connections_active 0\n"));
+            assertTrue(metrics.scrape().contains("atlas_connections_active 0.0\n"));
         } finally {
             first.finishAndReleaseAll();
             second.finishAndReleaseAll();
@@ -42,7 +42,7 @@ class ConnectionMetricsHandlerTest {
         try {
             channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
             assertFalse(channel.isActive());
-            assertTrue(metrics.scrape().contains("atlas_connections_active 0\n"));
+            assertTrue(metrics.scrape().contains("atlas_connections_active 0.0\n"));
         } finally { channel.finishAndReleaseAll(); }
     }
 
@@ -60,9 +60,9 @@ class ConnectionMetricsHandlerTest {
             FullHttpResponse response = channel.readOutbound();
             try { assertEquals(413, response.status().code()); } finally { response.release(); }
             assertEquals(0, body.refCnt());
-            assertTrue(metrics.scrape().contains("atlas_http_requests_total 1\n"));
-            assertTrue(metrics.scrape().contains("atlas_http_errors_total 1\n"));
-            assertTrue(metrics.scrape().contains("atlas_batches_accepted_total 0\n"));
+            assertTrue(metrics.scrape().contains("atlas_http_requests_total 1.0\n"));
+            assertTrue(metrics.scrape().contains("atlas_http_errors_total 1.0\n"));
+            assertTrue(metrics.scrape().contains("atlas_batches_accepted_total 0.0\n"));
         } finally { channel.finishAndReleaseAll(); }
     }
 }

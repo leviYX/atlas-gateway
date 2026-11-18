@@ -28,3 +28,11 @@ replay_pid*
 /.idea/
 *.iml
 !.mvn/wrapper/maven-wrapper.jar
+
+# 压测与诊断产物
+/results/
+*.jfr
+
+# Python 脚本缓存
+__pycache__/
+*.pyc
