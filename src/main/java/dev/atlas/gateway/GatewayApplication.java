@@ -10,9 +10,9 @@ public final class GatewayApplication {
     private GatewayApplication() { }
 
     public static void main(String[] args) throws InterruptedException {
-        GatewayConfig config = GatewayConfig.from(System.getProperties());
+        var config = GatewayConfig.from(System.getProperties());
         try (GatewayServer server = new GatewayServer(config).start()) {
-            Thread hook = new Thread(server::close, "atlas-shutdown");
+            var hook = new Thread(server::close, "atlas-shutdown");
             Runtime.getRuntime().addShutdownHook(hook);
             System.out.printf("Atlas Gateway listening on %s:%d transport=%s mode=%s workers=%d%n",
                     config.host(), server.port(), config.transport(), config.mode(), config.workers());

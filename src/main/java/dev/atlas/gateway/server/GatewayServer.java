@@ -53,7 +53,9 @@ public final class GatewayServer implements AutoCloseable {
             workers = new MultiThreadIoEventLoopGroup(config.workers(), transport.factory());
             metrics.bindEventLoops(boss, "boss");
             metrics.bindEventLoops(workers, "worker");
-            server = new ServerBootstrap().group(boss, workers).channel(transport.channelType())
+            server = new ServerBootstrap()
+                    .group(boss, workers)
+                    .channel(transport.channelType())
                     .option(ChannelOption.SO_BACKLOG, 1024)
                     .childOption(ChannelOption.TCP_NODELAY, true)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
