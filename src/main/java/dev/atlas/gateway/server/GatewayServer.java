@@ -71,7 +71,10 @@ public final class GatewayServer implements AutoCloseable {
                                     .addLast(new HttpObjectAggregator(config.maxBodyBytes(), true))
                                     .addLast(new IngestHandler(config.mode(), config.maxEvents(), metrics));
                         }
-                    }).bind(config.host(), config.port()).sync().channel();
+                    })
+                    .bind(config.host(), config.port())
+                    .sync()
+                    .channel();
             return this;
         } catch (InterruptedException | RuntimeException | Error failure) {
             close();

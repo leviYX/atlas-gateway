@@ -19,7 +19,50 @@
 JSON 校验在 EventLoop 执行，后续可用压测判断是否需要隔离；不要在此线程加入阻塞操作。
 关闭时不承诺完成所有在途请求，客户端必须能识别断连；生产排空流程留到持久化链路阶段。
 
-后续引入业务计算，以及监控体系，包括JFR等
+## Linux 一键脚本
+
+项目同步到 Linux 后，进入你的项目目录执行：
+
+```bash
+cd /home/levi/projects/atlas-gateway
+bash scripts/setup.sh       # 首次安装压测和采集工具；JDK 25 需已安装
+bash scripts/build.sh       # 首次及代码更新后构建、测试
+bash scripts/start.sh       # 后台启动 io_uring，自动开启 JFR 和 GC 日志
+bash scripts/bench.sh       # 20 秒预热 + 60 秒正式压测，自动采集 Linux 指标
+bash scripts/stop.sh        # 停止网关，落盘 JFR
+```
+
+| 操作 | 命令 |
+|---|---|
+| 查看状态 | `bash scripts/status.sh` |
+| 持续查看日志 | `bash scripts/logs.sh`（Ctrl+C 只退出看日志） |
+| 单独采集 60 秒 | `bash scripts/collect.sh 60` |
+| 切换 epoll | 先 `bash scripts/stop.sh`，再 `bash scripts/start.sh epoll` |
+| 切换 NIO | 先停止，再 `bash scripts/start.sh nio` |
+| 启动 Grafana / Prometheus | `bash scripts/monitor-up.sh`（需要已运行的 Docker） |
+| 停止监控容器 | `bash scripts/monitor-down.sh`（保留数据卷） |
+
+常用参数统一放在 [scripts/gateway.conf](scripts/gateway.conf)，默认 2 个 worker、512m 堆、64 个压测连接。
+个人配置可写入不提交 Git 的 `scripts/gateway.local.conf`，例如：
+
+```bash
+WORKERS=4
+HEAP=1g
+BENCH_CONNECTIONS=256
+BENCH_DURATION_SECONDS=120
+```
+
+脚本根据自身位置识别项目目录，可以在任意目录通过完整路径调用。
+脚本启动默认监听 `0.0.0.0:8080`；下文直接运行 Java 的默认值仍是 `127.0.0.1` / NIO。
+每次启动生成独立的 `results/<时间>-<transport>/`，包括服务日志、GC、JFR 和运行参数；
+压测输出位于其中的 `bench-<时间>/measure.log`，Linux 采集结果也保留在本轮目录。
+JFR 默认保留最近 30 分钟、最多 256m，停止服务后打开 `atlas.jfr` 分析。
+
+压测器与网关在同一虚拟机运行，会争用 CPU；适合先学习和比较，不代表生产容量。
+比较三种 transport 时保持其他配置一致，每轮依次启动、压测、停止。
+监控入口会提示设置 Grafana 密码，访问 `http://localhost:3000`（用户名 `admin`）；
+Prometheus 是 `http://localhost:9090/targets`。若从 Mac 访问，请使用 Linux 可访问地址或端口转发。
+Docker 必须能访问网关；若 Docker 和网关不在同一主机，按 [可观测性说明](docs/observability.md) 修改采集地址，并确认 Target 为 UP。
 
 ## 环境与构建
 
