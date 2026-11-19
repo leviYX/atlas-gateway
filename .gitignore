@@ -36,3 +36,6 @@ replay_pid*
 # Python 脚本缓存
 __pycache__/
 *.pyc
+
+# 本机脚本覆盖配置（可能包含监控密码）
+/scripts/gateway.local.conf
